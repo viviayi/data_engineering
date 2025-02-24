@@ -1,42 +1,28 @@
-WITH quarterly_revenue AS (
+
+{{ config(materialized='table') }}
+
+
+with quarterly_revenue as (
     SELECT
+        service_type,
         EXTRACT(YEAR FROM pickup_datetime) AS year,
         EXTRACT(QUARTER FROM pickup_datetime) AS quarter,
-        service_type,
-        SUM(total_amount) AS total_revenue
-    FROM {{ ref("fact_trips") }}
-    WHERE total_amount IS NOT NULL
-    GROUP BY 1, 2, 3
+        SUM(total_amount) AS revenue
+
+    FROM {{ ref('fact_trips') }}
+    WHERE EXTRACT(YEAR FROM pickup_datetime) IN (2019, 2020)
+    GROUP BY service_type,year,quarter
 ),
 
-revenue_with_prev_year AS (
-    SELECT
+quarterly_growth AS (
+    SELECT 
         year,
         quarter,
         service_type,
-        total_revenue,
-        -- 获取前一年同季度的收入
-        LAG(total_revenue) OVER (
-            PARTITION BY service_type, quarter
-            ORDER BY year
-        ) AS prev_year_revenue
+        revenue,
+        LAG(revenue) OVER (PARTITION BY service_type, quarter ORDER BY year) AS prev_year_revenue,
+        (revenue - LAG(revenue) OVER (PARTITION BY service_type, quarter ORDER BY year)) / 
+        NULLIF(LAG(revenue) OVER (PARTITION BY service_type, quarter ORDER BY year), 0) AS yoy_growth
     FROM quarterly_revenue
-),
-
-revenue_with_growth AS (
-    SELECT
-        year,
-        quarter,
-        service_type,
-        total_revenue,
-        prev_year_revenue,
-        -- 计算 YoY 增长率
-        ROUND(
-            (total_revenue - COALESCE(prev_year_revenue, 0)) 
-            / NULLIF(COALESCE(prev_year_revenue, 1), 0) * 100, 2
-        ) AS yoy_growth
-    FROM revenue_with_prev_year
 )
-
-SELECT * FROM revenue_with_growth
-ORDER BY service_type, year, quarter
+SELECT * FROM quarterly_growth

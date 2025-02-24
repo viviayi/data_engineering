@@ -1,14 +1,32 @@
-WITH fhv_data AS (
-    SELECT
-        dispatching_base_num,
-        SAFE_CAST(pickup_datetime AS TIMESTAMP) AS pickup_datetime,
-        SAFE_CAST(dropOff_datetime AS TIMESTAMP) AS dropoff_datetime,
-        SAFE_CAST(PUlocationID AS INT64) AS pickup_location_id,
-        SAFE_CAST(DOlocationID AS INT64) AS dropoff_location_id,
-        SAFE_CAST(SR_Flag AS INT64) AS sr_flag,
-        affiliated_base_number
-    FROM {{ source('staging', 'external_fhv_2019') }}
-    WHERE dispatching_base_num IS NOT NULL
-)
 
-SELECT * FROM fhv_data
+{{
+    config(
+        materialized='view'
+    )
+}}
+
+with tripdata as 
+(
+  select *
+  from {{ source('staging','external_fhv_2019') }}
+  where dispatching_base_num is not null 
+)
+select
+
+    dispatching_base_num,
+    cast(pickup_datetime as timestamp) as pickup_datetime,
+    cast(dropOff_datetime as timestamp) as dropOff_datetime,
+    PUlocationID,
+    DOlocationID,
+    SR_Flag,
+    Affiliated_base_number
+    
+
+from tripdata
+
+-- dbt build --select <model_name> --vars '{'is_test_run': 'false'}'
+{% if var('is_test_run', default=true) %}
+
+  limit 100
+
+{% endif %}
